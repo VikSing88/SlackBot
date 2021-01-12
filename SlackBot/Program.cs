@@ -3,14 +3,16 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
+using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TestApp;
 
-namespace TestingSlackAPI
+namespace SlackBotAPI
 {
-  class TestBot
+  class SlackBot
   {
     #region Константы
 
@@ -52,12 +54,12 @@ namespace TestingSlackAPI
     /// <summary>
     /// Количество дней до предупреждения.
     /// </summary>
-    const int DaysCountBeforeWarning = 7;
+    const int DaysCountBeforeWarning = 15;
 
     /// <summary>
     /// Количество дней до открепления (отпинивания) сообщения.
     /// </summary>
-    const int DaysCountBeforeUnpining = 3;
+    const int DaysCountBeforeUnpining = 15;
 
     /// <summary>
     /// ID бота.
@@ -78,6 +80,25 @@ namespace TestingSlackAPI
 
     #region Вложенные типы
 
+    public class RemovePinsMethod
+    {
+      public string channel { get; set; }
+      public string timestamp { get; set; }
+    }
+    public class AddReactionMethod
+    {
+      public string channel { get; set; }
+      public string timestamp { get; set; }
+      public string name { get; set; }
+    }
+
+    public class PostMessageMethod
+    {
+      public string channel { get; set; }
+      public string text { get; set; }
+      public string thread_ts { get; set; }
+    }
+
     /// <summary>
     /// Информация о запиненном сообщении.
     /// </summary>
@@ -91,7 +112,7 @@ namespace TestingSlackAPI
 
     #region Поля и свойства
 
-    private static WebClient client;
+    private static HttpClient client;
 
     #endregion
 
@@ -99,30 +120,27 @@ namespace TestingSlackAPI
 
     public static void Main()
     {
-      client = new WebClient();
       var webProxy = new WebProxy();
       webProxy.UseDefaultCredentials = true;
-      client.Proxy = webProxy;
+      client = new HttpClient(new HttpClientHandler() { Proxy = webProxy });
+      client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", botToken);
 
       ProcessPinsList();
+      Console.ReadKey();
     }
 
     /// <summary>
     /// Обработать список запиненных сообщений.
     /// </summary>
-    private static void ProcessPinsList()
+    private static async void ProcessPinsList()
     {
-      var dataForRequest = new NameValueCollection();
-      dataForRequest["token"] = botToken;
-      dataForRequest["channel"] = channelID;
-
-      var response = client.UploadValues(slackApiLink + "pins.list", postRequestType, dataForRequest);
-      string responseInString = Encoding.UTF8.GetString(response);
-      var list = JsonConvert.DeserializeObject<PinsResponse>(responseInString);
+      var response = await client.GetAsync(slackApiLink + "pins.list?channel=C01HMBYB4MS");
+      var responseJson = await response.Content.ReadAsStringAsync();
+      var list = JsonConvert.DeserializeObject<PinsResponse>(responseJson);
       var oldMessageTSList = GetOldMessageList(list.items);
       ReplyMessageInOldThreads(oldMessageTSList);
     }
-
+    
     /// <summary>
     /// Отправить сообщение в тред.
     /// </summary>
@@ -148,16 +166,23 @@ namespace TestingSlackAPI
     /// Открепить сообщение.
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
-    private static void UnpinMessage(string messageTimeStamp)
+    private static async void UnpinMessage(string messageTimeStamp)
     {
-      var dataForRequest = new NameValueCollection();
-      dataForRequest["token"] = botToken;
-      dataForRequest["channel"] = channelID;
-      dataForRequest["timestamp"] = messageTimeStamp;
+      var msg = new RemovePinsMethod
+      {
+        channel = channelID,
+        timestamp = messageTimeStamp
+      };
 
-      var response = client.UploadValues(slackApiLink + "pins.remove", postRequestType,
-        dataForRequest);
-      string responseInString = Encoding.UTF8.GetString(response);
+      var content = JsonConvert.SerializeObject(msg);
+      var httpContent = new StringContent(
+          content,
+          Encoding.UTF8,
+          "application/json"
+      );
+
+      var response = await client.PostAsync(slackApiLink + "pins.remove", httpContent);
+      var responseJson = await response.Content.ReadAsStringAsync();
     }
 
     /// <summary>
@@ -167,16 +192,14 @@ namespace TestingSlackAPI
     /// <returns>Список закрепленных сообщений, с момента создания которых прошло больше DaysCountBeforeWarning дней.</returns>
     private static List<MessageInfo> GetOldMessageList(List<PinItem> pinedMessages)
     {
-      var oldPinedMessageList = new List<MessageInfo>();
+      var oldPinedMessageList = new List<MessageInfo> ();
       foreach (PinItem pinedMessage in pinedMessages)
       {
         if (IsOldPinedMessage(pinedMessage.message.ts, DaysCountBeforeWarning))
         {
-          oldPinedMessageList.Add(new MessageInfo()
-          {
-            timeStamp = pinedMessage.message.ts,
-            action = GetPinedMessageAction(pinedMessage.message.ts)
-          });
+          MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.message.ts)).Result;
+          oldPinedMessageList.Add(new MessageInfo() { timeStamp = pinedMessage.message.ts , 
+            action = msgAction }) ;
         }
       }
       return oldPinedMessageList;
@@ -187,18 +210,11 @@ namespace TestingSlackAPI
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени запиненного сообщения.</param>
     /// <returns>Действие, которое необходимо с закрепленным сообщением.</returns>
-    private static MessageAction GetPinedMessageAction(string messageTimeStamp)
+    private static async Task<MessageAction> GetPinedMessageAction(string messageTimeStamp)
     {
-      // Получаем список ответов из треда закрепленного сообщения.
-      var dataForRequest = new NameValueCollection();
-      dataForRequest["token"] = botToken;
-      dataForRequest["channel"] = channelID;
-      dataForRequest["ts"] = messageTimeStamp;
-
-      var response = client.UploadValues(slackApiLink + "conversations.replies", postRequestType,
-        dataForRequest);
-      string responseInString = Encoding.UTF8.GetString(response);
-      var responseObject = JsonConvert.DeserializeObject<RepliesResponse>(responseInString);
+      var response = await client.GetAsync(slackApiLink + "conversations.replies?channel=C01HMBYB4MS&ts=" + messageTimeStamp);
+      var responseJson = await response.Content.ReadAsStringAsync();
+      var responseObject = JsonConvert.DeserializeObject<RepliesResponse>(responseJson);
 
       var latest_message_number = responseObject.messages.Count - 1;
       return DefineActionByDateAndAuthorOfMessage(responseObject.messages[latest_message_number].ts,
@@ -209,17 +225,24 @@ namespace TestingSlackAPI
     /// Добавить эмодзи на открепляемое сообщение.
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени открепляемого сообщения.</param>
-    private static void AddEmoji(string messageTimeStamp)
+    private static async void AddEmoji(string messageTimeStamp)
     {
-      var dataForRequest = new NameValueCollection();
-      dataForRequest["token"] = botToken;
-      dataForRequest["channel"] = channelID;
-      dataForRequest["timestamp"] = messageTimeStamp;
-      dataForRequest["name"] = emojiName;
+      var msg = new AddReactionMethod
+      {
+        channel = channelID,
+        timestamp = messageTimeStamp,
+        name = emojiName
+      };
 
-      var response = client.UploadValues(slackApiLink + "reactions.add", postRequestType,
-        dataForRequest);
-      string responseInString = Encoding.UTF8.GetString(response);
+      var content = JsonConvert.SerializeObject(msg);
+      var httpContent = new StringContent(
+          content,
+          Encoding.UTF8,
+          "application/json"
+      );
+
+      var response = await client.PostAsync(slackApiLink + "reactions.add", httpContent);
+      var responseJson = await response.Content.ReadAsStringAsync();
     }
 
     /// <summary>
@@ -230,13 +253,13 @@ namespace TestingSlackAPI
     /// <returns>Действие над закрепленным сообщением.</returns>
     private static MessageAction DefineActionByDateAndAuthorOfMessage(string messageTimeStamp, string userID)
     {
-      if (messageTimeStamp != null)
+      if (messageTimeStamp != null)      
       {
         if ((userID != BotID) & (IsOldPinedMessage(messageTimeStamp, DaysCountBeforeWarning)))
         {
           return MessageAction.NeedWarning;
         }
-        else
+        else 
         if ((userID == BotID) & (IsOldPinedMessage(messageTimeStamp, DaysCountBeforeUnpining)))
         {
           return MessageAction.NeedUnpin;
@@ -276,20 +299,25 @@ namespace TestingSlackAPI
     /// </summary>
     /// <param name="textMessage">Текст отправляемого сообщения.</param>
     /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
-    private static void SendMessage(string textMessage, string messageTimeStamp)
+    private static async void SendMessage(string textMessage, string messageTimeStamp)
     {
-      var dataForMessage = new NameValueCollection();
-      dataForMessage["token"] = botToken;
-      dataForMessage["channel"] = channelID;
-      dataForMessage["text"] = textMessage;
-      dataForMessage["thread_ts"] = messageTimeStamp;
+      var msg = new PostMessageMethod
+      {
+        channel = channelID,
+        text = textMessage,
+        thread_ts = messageTimeStamp
+      };
 
-      var response = client.UploadValues(slackApiLink + "chat.postMessage", postRequestType,
-        dataForMessage);
-      string responseInString = Encoding.UTF8.GetString(response);
-      Console.WriteLine(responseInString);
+      var content = JsonConvert.SerializeObject(msg);
+      var httpContent = new StringContent(
+          content,
+          Encoding.UTF8,
+          "application/json"
+      );
+
+      var response = await client.PostAsync(slackApiLink + "chat.postMessage", httpContent);
+      var responseJson = await response.Content.ReadAsStringAsync();
     }
+    #endregion
   }
-
-  #endregion
 }
