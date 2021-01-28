@@ -39,12 +39,12 @@ namespace SlackBotAPI
     /// <summary>
     /// Текст предупреждения.
     /// </summary>
-    const string WarningTextMessage = "Сейчас как отпиню!";
+    const string WarningTextMessage = "Новых сообщений не было уже {0} дней. Закрываем консультацию?";
 
     /// <summary>
     /// Текст при откреплении (отпинивании) сообщения.
     /// </summary>
-    const string UnpiningTextMessage = "Все, отпиниваю!";
+    const string UnpiningTextMessage = "Консультация закрыта.";
 
     /// <summary>
     /// Название эмодзи. 
@@ -151,7 +151,7 @@ namespace SlackBotAPI
       {
         if (messageData.action == MessageAction.NeedWarning)
         {
-          SendMessage(WarningTextMessage, messageData.timeStamp);
+          SendMessage(String.Format(WarningTextMessage, DaysCountBeforeWarning), messageData.timeStamp);
         }
         else if (messageData.action == MessageAction.NeedUnpin)
         {
