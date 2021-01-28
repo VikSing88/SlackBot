@@ -54,12 +54,12 @@ namespace SlackBotAPI
     /// <summary>
     /// Количество дней до предупреждения.
     /// </summary>
-    const int DaysCountBeforeWarning = 15;
+    const int DaysBeforeWarning = 7;
 
     /// <summary>
     /// Количество дней до открепления (отпинивания) сообщения.
     /// </summary>
-    const int DaysCountBeforeUnpining = 15;
+    const int DaysBeforeUnpining = 3;
 
     /// <summary>
     /// ID бота.
@@ -73,7 +73,7 @@ namespace SlackBotAPI
     {
       NeedUnpin,
       NeedWarning,
-      Nothing
+      DoNothing
     }
 
     #endregion
@@ -151,7 +151,7 @@ namespace SlackBotAPI
       {
         if (messageData.action == MessageAction.NeedWarning)
         {
-          SendMessage(String.Format(WarningTextMessage, DaysCountBeforeWarning), messageData.timeStamp);
+          SendMessage(String.Format(WarningTextMessage, DaysBeforeWarning), messageData.timeStamp);
         }
         else if (messageData.action == MessageAction.NeedUnpin)
         {
@@ -255,17 +255,17 @@ namespace SlackBotAPI
     {
       if (messageTimeStamp != null)      
       {
-        if ((userID != BotID) & (IsOldPinedMessage(messageTimeStamp, DaysCountBeforeWarning)))
+        if ((userID != BotID) & (IsOldPinedMessage(messageTimeStamp, DaysBeforeWarning)))
         {
           return MessageAction.NeedWarning;
         }
         else 
-        if ((userID == BotID) & (IsOldPinedMessage(messageTimeStamp, DaysCountBeforeUnpining)))
+        if ((userID == BotID) & (IsOldPinedMessage(messageTimeStamp, DaysBeforeUnpining)))
         {
           return MessageAction.NeedUnpin;
         }
       }
-      return MessageAction.Nothing;
+      return MessageAction.DoNothing;
     }
 
     /// <summary>
@@ -279,7 +279,7 @@ namespace SlackBotAPI
       double timeStampWithoutMicroSeconds =
           Convert.ToDouble(messageTimeStamp.Substring(0, messageTimeStamp.IndexOf('.')));
       DateTime messageDate = ConvertUnixTimeStampToDateTime(timeStampWithoutMicroSeconds);
-      return messageDate.AddMinutes(DayCount) < DateTime.Now;
+      return messageDate.AddDays(DayCount) < DateTime.Now;
     }
 
     /// <summary>
