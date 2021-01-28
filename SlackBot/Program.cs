@@ -195,7 +195,7 @@ namespace SlackBotAPI
       var oldPinedMessageList = new List<MessageInfo> ();
       foreach (PinItem pinedMessage in pinedMessages)
       {
-        if (IsOldPinedMessage(pinedMessage.message.ts, DaysCountBeforeWarning))
+        if (IsOldPinedMessage(pinedMessage.message.ts, Math.Min(DaysBeforeWarning, DaysBeforeUnpining))))
         {
           MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.message.ts)).Result;
           oldPinedMessageList.Add(new MessageInfo() { timeStamp = pinedMessage.message.ts , 
