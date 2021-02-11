@@ -39,7 +39,7 @@ namespace SlackBotAPI
     /// <summary>
     /// Текст предупреждения.
     /// </summary>
-    const string WarningTextMessage = "Новых сообщений не было уже {0} дней. Закрываем консультацию?";
+    const string WarningTextMessage = "Новых сообщений не было уже больше {0} дней. Закрываем консультацию?";
 
     /// <summary>
     /// Текст при откреплении (отпинивании) сообщения.
@@ -120,13 +120,23 @@ namespace SlackBotAPI
 
     public static void Main()
     {
+      Console.WriteLine("Работа бота начата.");
       var webProxy = new WebProxy();
       webProxy.UseDefaultCredentials = true;
-      client = new HttpClient(new HttpClientHandler() { Proxy = webProxy });
-      client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", botToken);
-
-      ProcessPinsList();
-      Console.ReadKey();
+      try
+      {
+        client = new HttpClient(new HttpClientHandler() { Proxy = webProxy });
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", botToken);
+        ProcessPinsList();
+      }
+      catch (Exception ex)
+      {
+        Console.WriteLine(ex.Message);
+      }
+      finally
+      {
+        Console.ReadKey();
+      }
     }
 
     /// <summary>
@@ -134,7 +144,7 @@ namespace SlackBotAPI
     /// </summary>
     private static async void ProcessPinsList()
     {
-      var response = await client.GetAsync(slackApiLink + "pins.list?channel=C01HMBYB4MS");
+      var response = await client.GetAsync(slackApiLink + "pins.list?channel=" + channelID);
       var responseJson = await response.Content.ReadAsStringAsync();
       var list = JsonConvert.DeserializeObject<PinsResponse>(responseJson);
       var oldMessageTSList = GetOldMessageList(list.items);
@@ -192,14 +202,17 @@ namespace SlackBotAPI
     /// <returns>Список закрепленных сообщений, с момента создания которых прошло больше DaysCountBeforeWarning дней.</returns>
     private static List<MessageInfo> GetOldMessageList(List<PinItem> pinedMessages)
     {
-      var oldPinedMessageList = new List<MessageInfo> ();
+      var oldPinedMessageList = new List<MessageInfo>();
       foreach (PinItem pinedMessage in pinedMessages)
       {
         if (IsOldPinedMessage(pinedMessage.message.ts, Math.Min(DaysBeforeWarning, DaysBeforeUnpining)))
         {
           MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.message.ts)).Result;
-          oldPinedMessageList.Add(new MessageInfo() { timeStamp = pinedMessage.message.ts , 
-            action = msgAction }) ;
+          oldPinedMessageList.Add(new MessageInfo()
+          {
+            timeStamp = pinedMessage.message.ts,
+            action = msgAction
+          });
         }
       }
       return oldPinedMessageList;
@@ -212,7 +225,7 @@ namespace SlackBotAPI
     /// <returns>Действие, которое необходимо с закрепленным сообщением.</returns>
     private static async Task<MessageAction> GetPinedMessageAction(string messageTimeStamp)
     {
-      var response = await client.GetAsync(slackApiLink + "conversations.replies?channel=C01HMBYB4MS&ts=" + messageTimeStamp);
+      var response = await client.GetAsync(slackApiLink + "conversations.replies?channel=" + channelID + "& ts=" + messageTimeStamp);
       var responseJson = await response.Content.ReadAsStringAsync();
       var responseObject = JsonConvert.DeserializeObject<RepliesResponse>(responseJson);
 
