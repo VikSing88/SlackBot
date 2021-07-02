@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace SlackBotApp
+namespace SlackBot
 {
   #region Классы парсинга ответа для команды "pins.list"
 

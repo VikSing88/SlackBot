@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 
-namespace SlackBotApp
+namespace SlackBot
 {
   class SlackBot
   {
@@ -42,7 +42,29 @@ namespace SlackBotApp
     /// <summary>
     /// Название эмодзи. 
     /// </summary>
-    const string emojiName = "no_entry_sign";
+    const string emojiName = "no_entry_sign";       
+
+    #endregion
+
+    #region Вложенные типы   
+
+    /// <summary>
+    /// Информация о запиненном сообщении.
+    /// </summary>
+    private class MessageInfo
+    {
+      public string timeStamp;
+      public MessageAction action;
+    }
+
+    #endregion
+
+    #region Поля и свойства
+
+    /// <summary>
+    /// Http-клиент.
+    /// </summary>
+    private static HttpClient client;
 
     /// <summary>
     /// Токен бота.
@@ -78,44 +100,6 @@ namespace SlackBotApp
       NeedWarning,
       DoNothing
     }
-
-    #endregion
-
-    #region Вложенные типы
-
-    public class RemovePinsMethod
-    {
-      public string channel { get; set; }
-      public string timestamp { get; set; }
-    }
-    public class AddReactionMethod
-    {
-      public string channel { get; set; }
-      public string timestamp { get; set; }
-      public string name { get; set; }
-    }
-
-    public class PostMessageMethod
-    {
-      public string channel { get; set; }
-      public string text { get; set; }
-      public string thread_ts { get; set; }
-    }
-
-    /// <summary>
-    /// Информация о запиненном сообщении.
-    /// </summary>
-    private class MessageInfo
-    {
-      public string timeStamp;
-      public MessageAction action;
-    }
-
-    #endregion
-
-    #region Поля и свойства
-
-    private static HttpClient client;
 
     #endregion
 
@@ -251,7 +235,7 @@ namespace SlackBotApp
     /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
     private static async void UnpinMessage(string messageTimeStamp)
     {
-      var msg = new RemovePinsMethod
+      var msg = new RemovePinMessage
       {
         channel = channelID,
         timestamp = messageTimeStamp
@@ -314,7 +298,7 @@ namespace SlackBotApp
     /// <param name="messageTimeStamp">Отметка времени открепляемого сообщения.</param>
     private static async void AddEmoji(string messageTimeStamp)
     {
-      var msg = new AddReactionMethod
+      var msg = new AddReactionMessage
       {
         channel = channelID,
         timestamp = messageTimeStamp,
@@ -389,7 +373,7 @@ namespace SlackBotApp
     /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
     private static async void SendMessage(string textMessage, string messageTimeStamp)
     {
-      var msg = new PostMessageMethod
+      var msg = new SlackMessage
       {
         channel = channelID,
         text = textMessage,
