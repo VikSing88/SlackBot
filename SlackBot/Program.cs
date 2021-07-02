@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using TestApp;
@@ -17,24 +19,19 @@ namespace SlackBotAPI
     #region Константы
 
     /// <summary>
-    /// Токен бота.
-    /// </summary>
-    const string botToken = "xoxb-1593440270915-1578574815463-wjHDhugVnTmgwgLjFeJDlRvz";
-
-    /// <summary>
-    /// ID канала.
-    /// </summary>
-    const string channelID = "C01HMBYB4MS";
-
-    /// <summary>
     /// 
     /// </summary>
     const string slackApiLink = "https://slack.com/api/";
 
     /// <summary>
-    /// Тип отправляемого запроса.
+    /// Количество дней до предупреждения по умолчанию.
     /// </summary>
-    const string postRequestType = "POST";
+    const int daysBeforeWarningByDefault = 7;
+
+    /// <summary>
+    /// Количество дней до открепления (отпинивания) сообщения по умолчанию.
+    /// </summary>
+    const int daysBeforeUnpiningByDefault = 3;
 
     /// <summary>
     /// Текст предупреждения.
@@ -52,19 +49,29 @@ namespace SlackBotAPI
     const string emojiName = "no_entry_sign";
 
     /// <summary>
+    /// Токен бота.
+    /// </summary>
+    private static string botToken;
+
+    /// <summary>
+    /// ID канала.
+    /// </summary>
+    private static string channelID;
+
+    /// <summary>
     /// Количество дней до предупреждения.
     /// </summary>
-    const int DaysBeforeWarning = 7;
+    private static int daysBeforeWarning;
 
     /// <summary>
     /// Количество дней до открепления (отпинивания) сообщения.
     /// </summary>
-    const int DaysBeforeUnpining = 3;
+    private static int daysBeforeUnpining;
 
     /// <summary>
     /// ID бота.
     /// </summary>
-    const string BotID = "U01H0GWPZDM";
+    private static string botID;
 
     /// <summary>
     /// Действие, которое надо совершить над запиненным сообщением.
@@ -118,24 +125,86 @@ namespace SlackBotAPI
 
     #region Методы
 
-    public static void Main()
+    /// <summary>
+    /// Попытаться конвертировать строку в число.
+    /// </summary>
+    /// <param name="paramName">Имя параметра.</param>
+    /// <param name="value">Конвертируемое значение.</param>
+    /// <param name="defaultValue">Значение по умолчанию.</param>
+    /// <returns></returns>
+    private static int TryConvertStringToInt(string paramName, string value, int defaultValue)
     {
-      Console.WriteLine("Работа бота начата.");
+      int resultValue;
+      try
+      { 
+        resultValue = Convert.ToInt32(value);
+      }
+      catch (Exception ex)
+      {
+        Console.WriteLine($"Произошла ошибка при чтении параметра {paramName}: {ex.Message}. " +
+          $"Взято значение по умолчанию {defaultValue}.");
+        resultValue = defaultValue;
+      }
+
+      return resultValue;
+    }
+
+    /// <summary>
+    /// Прочитать конфиг.
+    /// </summary>
+    private static void ReadConfig()
+    {
+      try
+      {
+        var config = new ConfigurationBuilder()
+          .AddJsonFile("appsettings.json")
+          .Build();
+
+        botToken = config["BotToken"];
+        channelID = config["ChannelID"];
+        botID = config["BotID"];
+        daysBeforeWarning = TryConvertStringToInt(nameof(daysBeforeWarning), config["DaysBeforeWarning"], 
+          daysBeforeWarningByDefault);
+        daysBeforeUnpining = TryConvertStringToInt(nameof(daysBeforeUnpining), config["DaysBeforeUnpining"],
+          daysBeforeUnpiningByDefault);
+      }
+      catch(Exception ex)
+      {
+        Console.WriteLine($"Ошибка чтения конфигурационного файла: {ex.Message}");
+        throw;
+      }
+    }
+
+    private static void ConnectToSlack()
+    {
       var webProxy = new WebProxy();
       webProxy.UseDefaultCredentials = true;
       try
       {
         client = new HttpClient(new HttpClientHandler() { Proxy = webProxy });
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", botToken);
-        ProcessPinsList();
       }
       catch (Exception ex)
       {
-        Console.WriteLine(ex.Message);
+        Console.WriteLine($"Ошибка при подключении к slack: {ex.Message}");
+        throw;
       }
-      finally
+    }
+
+    public static void Main()
+    {
+      try
       {
+        Console.WriteLine("Работа бота начата.");
+
+        ReadConfig();
+        ConnectToSlack();
+        ProcessPinsList();
         Console.ReadKey();
+      }
+      catch
+      {
+        Console.WriteLine("Работа бота завершилась из-за ошибок.");
       }
     }
 
@@ -144,11 +213,19 @@ namespace SlackBotAPI
     /// </summary>
     private static async void ProcessPinsList()
     {
-      var response = await client.GetAsync(slackApiLink + "pins.list?channel=" + channelID);
-      var responseJson = await response.Content.ReadAsStringAsync();
-      var list = JsonConvert.DeserializeObject<PinsResponse>(responseJson);
-      var oldMessageTSList = GetOldMessageList(list.items);
-      ReplyMessageInOldThreads(oldMessageTSList);
+      try
+      {
+        var response = await client.GetAsync(slackApiLink + "pins.list?channel=" + channelID);
+        var responseJson = await response.Content.ReadAsStringAsync();
+        var list = JsonConvert.DeserializeObject<PinsResponse>(responseJson);
+        var oldMessageTSList = GetOldMessageList(list.items);
+        ReplyMessageInOldThreads(oldMessageTSList);
+      }
+      catch(Exception ex)
+      {
+        Console.WriteLine($"Обработка сообщений завершилась с ошибкой: {ex.Message}");
+        throw;
+      }
     }
     
     /// <summary>
@@ -161,7 +238,7 @@ namespace SlackBotAPI
       {
         if (messageData.action == MessageAction.NeedWarning)
         {
-          SendMessage(String.Format(WarningTextMessage, DaysBeforeWarning), messageData.timeStamp);
+          SendMessage(String.Format(WarningTextMessage, daysBeforeWarning), messageData.timeStamp);
         }
         else if (messageData.action == MessageAction.NeedUnpin)
         {
@@ -205,7 +282,7 @@ namespace SlackBotAPI
       var oldPinedMessageList = new List<MessageInfo>();
       foreach (PinItem pinedMessage in pinedMessages)
       {
-        if (IsOldPinedMessage(pinedMessage.message.ts, Math.Min(DaysBeforeWarning, DaysBeforeUnpining)))
+        if (IsOldPinedMessage(pinedMessage.message.ts, Math.Min(daysBeforeWarning, daysBeforeUnpining)))
         {
           MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.message.ts)).Result;
           oldPinedMessageList.Add(new MessageInfo()
@@ -231,7 +308,8 @@ namespace SlackBotAPI
 
       var latest_message_number = responseObject.messages.Count - 1;
       return DefineActionByDateAndAuthorOfMessage(responseObject.messages[latest_message_number].ts,
-        responseObject.messages[latest_message_number].user);
+        responseObject.messages[latest_message_number].user, responseObject.messages[latest_message_number].text
+        );
     }
 
     /// <summary>
@@ -264,16 +342,17 @@ namespace SlackBotAPI
     /// <param name="messageTimeStamp">Отметка времени последнего сообщения из треда.</param>
     /// <param name="userID">ID автора последнего сообщения из треда. </param>
     /// <returns>Действие над закрепленным сообщением.</returns>
-    private static MessageAction DefineActionByDateAndAuthorOfMessage(string messageTimeStamp, string userID)
+    private static MessageAction DefineActionByDateAndAuthorOfMessage(string messageTimeStamp, string userID,
+      string text)
     {
       if (messageTimeStamp != null)      
       {
-        if ((userID != BotID) & (IsOldPinedMessage(messageTimeStamp, DaysBeforeWarning)))
+        if ((userID != botID) & (IsOldPinedMessage(messageTimeStamp, daysBeforeWarning)))
         {
           return MessageAction.NeedWarning;
         }
         else 
-        if ((userID == BotID) & (IsOldPinedMessage(messageTimeStamp, DaysBeforeUnpining)))
+        if ((userID == botID) & (IsOldPinedMessage(messageTimeStamp, daysBeforeUnpining)))
         {
           return MessageAction.NeedUnpin;
         }

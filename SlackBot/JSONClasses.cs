@@ -29,6 +29,7 @@ namespace TestApp
   {
     public string ts { get; set; }
     public string user { get; set; }
+    public string text { get; set; }
   }
 
   public class RepliesResponse
