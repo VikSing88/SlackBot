@@ -1,21 +1,20 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
-namespace TestApp
+namespace SlackBotApp
 {
   #region Классы парсинга ответа для команды "pins.list"
-  public class PinedMessage
+
+  internal class PinedMessage
   {
     public string ts { get; set; }
   }
 
-  public class PinItem
+  internal class PinItem
   {
     public PinedMessage message { get; set; }
   }
 
-  public class PinsResponse
+  internal class PinsResponse
   {
     public bool ok { get; set; }
     public List<PinItem> items { get; set; }
@@ -24,15 +23,15 @@ namespace TestApp
   #endregion
 
   #region Классы парсинга ответа для команды "conversations.replies"
- 
-  public class ReplyMessage
+
+  internal class ReplyMessage
   {
     public string ts { get; set; }
     public string user { get; set; }
     public string text { get; set; }
   }
 
-  public class RepliesResponse
+  internal class RepliesResponse
   {
     public bool ok { get; set; }
     public List<ReplyMessage> messages { get; set; }

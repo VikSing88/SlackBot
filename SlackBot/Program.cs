@@ -7,9 +7,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
-using TestApp;
 
-namespace SlackBotAPI
+namespace SlackBotApp
 {
   class SlackBot
   {
