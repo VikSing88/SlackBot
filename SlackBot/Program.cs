@@ -25,7 +25,7 @@ namespace SlackBot
     const int daysBeforeWarningByDefault = 7;
 
     /// <summary>
-    /// Количество дней до открепления (отпинивания) сообщения по умолчанию.
+    /// Количество дней до отпинивания сообщения по умолчанию.
     /// </summary>
     const int daysBeforeUnpiningByDefault = 3;
 
@@ -35,7 +35,7 @@ namespace SlackBot
     const string WarningTextMessage = "Новых сообщений не было уже больше {0} дней. Закрываем консультацию?";
 
     /// <summary>
-    /// Текст при откреплении (отпинивании) сообщения.
+    /// Текст при отпинивании сообщения.
     /// </summary>
     const string UnpiningTextMessage = "Консультация закрыта.";
 
@@ -82,7 +82,7 @@ namespace SlackBot
     private static int daysBeforeWarning;
 
     /// <summary>
-    /// Количество дней до открепления (отпинивания) сообщения.
+    /// Количество дней до отпинивания сообщения.
     /// </summary>
     private static int daysBeforeUnpining;
 
