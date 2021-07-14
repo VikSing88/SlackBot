@@ -1,16 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace SlackBot
 {
@@ -76,9 +72,14 @@ namespace SlackBot
     private static string botToken;
 
     /// <summary>
-    /// информация о всех каналах
+    /// Информация о всех каналах.
     /// </summary>
     private static readonly List<SlackChannelInfo> SlackChannelsInfo = new List<SlackChannelInfo>();
+
+    /// <summary>
+    /// Список из task`ов, окончание которых нужно дождаться
+    /// </summary>
+    private static readonly List<Task> tasks = new List<Task>();
 
     /// <summary>
     /// ID бота.
@@ -134,7 +135,19 @@ namespace SlackBot
           .AddJsonFile("appsettings.json")
           .Build();
 
-        SlackChannelsInfo.AddRange(JObject.Parse(File.ReadAllText("appsettings.json"))["Channels"].ToObject<List<SlackChannelInfo>>());
+        int i = 0;
+        while (config.GetSection($"Channels:{i}:ChannelID").Exists())
+        {
+          var channelID = config.GetSection($"Channels:{i}:ChannelID").Value;
+          var daysBeforeWarning = config.GetSection($"Channels:{i}:DaysBeforeWarning").Value;
+          var daysBeforeUnpining = config.GetSection($"Channels:{i}:DaysBeforeUnpining").Value;
+
+          SlackChannelsInfo.Add(new SlackChannelInfo(channelID,
+            TryConvertStringToInt("DaysBeforeWarning", daysBeforeWarning, daysBeforeWarningByDefault),
+            TryConvertStringToInt("DaysBeforeUnpining", daysBeforeUnpining, daysBeforeUnpiningByDefault))
+            );
+          i++;
+        }
         botToken = config["BotToken"];
         botID = config["BotID"];
       }
@@ -168,11 +181,12 @@ namespace SlackBot
         Console.WriteLine("Работа бота начата.");
 
         ReadConfig();
+        ConnectToSlack();
         foreach(var channelInfo in SlackChannelsInfo)
         {
-          ConnectToSlack();
-          ProcessPinsList(channelInfo).GetAwaiter().GetResult();
+          tasks.Add(Task.Run(() => ProcessPinsList(channelInfo)));
         }
+        Task.WaitAll(tasks.ToArray());
       }
       catch
       {
@@ -313,6 +327,8 @@ namespace SlackBot
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени последнего сообщения из треда.</param>
     /// <param name="userID">ID автора последнего сообщения из треда. </param>
+    /// <param name="text">Текст сообщения, с которого начинаеся тред</param>
+    /// <param name="channelInfo">Информация о канале, в котором нахоидтся тред</param>
     /// <returns>Действие над закрепленным сообщением.</returns>
     private static MessageAction DefineActionByDateAndAuthorOfMessage(string messageTimeStamp, string userID,
       string text, SlackChannelInfo channelInfo)
