@@ -72,19 +72,15 @@ namespace SlackBot
     private static string botToken;
 
     /// <summary>
-    /// ID канала.
+    /// Информация о всех каналах.
     /// </summary>
-    private static string channelID;
+    private static readonly List<SlackChannelInfo> SlackChannelsInfo = new List<SlackChannelInfo>();
 
     /// <summary>
-    /// Количество дней до предупреждения.
+    /// Список из task`ов, окончание которых нужно дождаться
     /// </summary>
-    private static int daysBeforeWarning;
+    private static readonly List<Task> tasks = new List<Task>();
 
-    /// <summary>
-    /// Количество дней до отпинивания сообщения.
-    /// </summary>
-    private static int daysBeforeUnpining;
 
     /// <summary>
     /// ID бота.
@@ -140,15 +136,22 @@ namespace SlackBot
           .AddJsonFile("appsettings.json")
           .Build();
 
+        int i = 0;
+        while (config.GetSection($"Channels:{i}:ChannelID").Exists())
+        {
+          var channelID = config.GetSection($"Channels:{i}:ChannelID").Value;
+          var daysBeforeWarning = TryConvertStringToInt("daysBeforeWarning", config.GetSection($"Channels:{i}:DaysBeforeWarning").Value,
+            daysBeforeWarningByDefault);
+          var daysBeforeUnpining = TryConvertStringToInt("daysBeforeUnpining", config.GetSection($"Channels:{i}:DaysBeforeUnpining").Value,
+            daysBeforeUnpiningByDefault);
+
+          SlackChannelsInfo.Add(new SlackChannelInfo(channelID, daysBeforeWarning, daysBeforeUnpining));
+          i++;
+        }
         botToken = config["BotToken"];
-        channelID = config["ChannelID"];
         botID = config["BotID"];
-        daysBeforeWarning = TryConvertStringToInt(nameof(daysBeforeWarning), config["DaysBeforeWarning"], 
-          daysBeforeWarningByDefault);
-        daysBeforeUnpining = TryConvertStringToInt(nameof(daysBeforeUnpining), config["DaysBeforeUnpining"],
-          daysBeforeUnpiningByDefault);
       }
-      catch(Exception ex)
+      catch (Exception ex)
       {
         Console.WriteLine($"Ошибка чтения конфигурационного файла: {ex.Message}");
         throw;
@@ -179,8 +182,11 @@ namespace SlackBot
 
         ReadConfig();
         ConnectToSlack();
-        ProcessPinsList();
-        Console.ReadKey();
+        foreach(var channelInfo in SlackChannelsInfo)
+        {
+          tasks.Add(Task.Run(() => ProcessPinsList(channelInfo)));
+        }
+        Task.WaitAll(tasks.ToArray());
       }
       catch
       {
@@ -191,15 +197,15 @@ namespace SlackBot
     /// <summary>
     /// Обработать список запиненных сообщений.
     /// </summary>
-    private static async void ProcessPinsList()
+    private static async Task ProcessPinsList(SlackChannelInfo channelInfo)
     {
       try
       {
-        var response = await client.GetAsync(slackApiLink + "pins.list?channel=" + channelID);
+        var response = await client.GetAsync($"{slackApiLink}pins.list?channel={channelInfo.ChannelID}");
         var responseJson = await response.Content.ReadAsStringAsync();
         var list = JsonConvert.DeserializeObject<PinsResponse>(responseJson);
-        var oldMessageTSList = GetOldMessageList(list.items);
-        ReplyMessageInOldThreads(oldMessageTSList);
+        var oldMessageTSList = GetOldMessageList(list.items, channelInfo);
+        ReplyMessageInOldThreads(oldMessageTSList, channelInfo);
       }
       catch(Exception ex)
       {
@@ -212,19 +218,19 @@ namespace SlackBot
     /// Отправить сообщение в тред.
     /// </summary>
     /// <param name="messageInfos">Список запиненных сообщений.</param>
-    private static void ReplyMessageInOldThreads(List<MessageInfo> messageInfos)
+    private static void ReplyMessageInOldThreads(List<MessageInfo> messageInfos, SlackChannelInfo channelInfo)
     {
       foreach (MessageInfo messageData in messageInfos)
       {
         if (messageData.action == MessageAction.NeedWarning)
         {
-          SendMessage(String.Format(WarningTextMessage, daysBeforeWarning), messageData.timeStamp);
+          SendMessage(String.Format(WarningTextMessage, channelInfo.DaysBeforeWarning), messageData.timeStamp, channelInfo);
         }
         else if (messageData.action == MessageAction.NeedUnpin)
         {
-          SendMessage(UnpiningTextMessage, messageData.timeStamp);
-          AddEmoji(messageData.timeStamp);
-          UnpinMessage(messageData.timeStamp);
+          SendMessage(UnpiningTextMessage, messageData.timeStamp, channelInfo);
+          AddEmoji(messageData.timeStamp, channelInfo);
+          UnpinMessage(messageData.timeStamp, channelInfo);
         }
       }
     }
@@ -233,11 +239,11 @@ namespace SlackBot
     /// Открепить сообщение.
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
-    private static async void UnpinMessage(string messageTimeStamp)
+    private static async void UnpinMessage(string messageTimeStamp, SlackChannelInfo channelInfo)
     {
       var msg = new RemovePinMessage
       {
-        channel = channelID,
+        channel = channelInfo.ChannelID,
         timestamp = messageTimeStamp
       };
 
@@ -257,19 +263,22 @@ namespace SlackBot
     /// </summary>
     /// <param name="pinedMessages">Полный список закрепленных сообщений.</param>
     /// <returns>Список закрепленных сообщений, с момента создания которых прошло больше DaysCountBeforeWarning дней.</returns>
-    private static List<MessageInfo> GetOldMessageList(List<PinItem> pinedMessages)
+    private static List<MessageInfo> GetOldMessageList(List<PinItem> pinedMessages, SlackChannelInfo channelInfo)
     {
       var oldPinedMessageList = new List<MessageInfo>();
-      foreach (PinItem pinedMessage in pinedMessages)
+      if (pinedMessages != null)
       {
-        if (IsOldPinedMessage(pinedMessage.message.ts, Math.Min(daysBeforeWarning, daysBeforeUnpining)))
+        foreach (PinItem pinedMessage in pinedMessages)
         {
-          MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.message.ts)).Result;
-          oldPinedMessageList.Add(new MessageInfo()
+          if (IsOldPinedMessage(pinedMessage.message.ts, Math.Min(channelInfo.DaysBeforeWarning, channelInfo.DaysBeforeUnpining)))
           {
-            timeStamp = pinedMessage.message.ts,
-            action = msgAction
-          });
+            MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.message.ts, channelInfo)).Result;
+            oldPinedMessageList.Add(new MessageInfo()
+            {
+              timeStamp = pinedMessage.message.ts,
+              action = msgAction
+            });
+          }
         }
       }
       return oldPinedMessageList;
@@ -280,15 +289,15 @@ namespace SlackBot
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени запиненного сообщения.</param>
     /// <returns>Действие, которое необходимо с закрепленным сообщением.</returns>
-    private static async Task<MessageAction> GetPinedMessageAction(string messageTimeStamp)
+    private static async Task<MessageAction> GetPinedMessageAction(string messageTimeStamp, SlackChannelInfo channelInfo)
     {
-      var response = await client.GetAsync(slackApiLink + "conversations.replies?channel=" + channelID + "& ts=" + messageTimeStamp);
+      var response = await client.GetAsync(slackApiLink + "conversations.replies?channel=" + channelInfo.ChannelID + "& ts=" + messageTimeStamp);
       var responseJson = await response.Content.ReadAsStringAsync();
       var responseObject = JsonConvert.DeserializeObject<RepliesResponse>(responseJson);
 
       var latest_message_number = responseObject.messages.Count - 1;
       return DefineActionByDateAndAuthorOfMessage(responseObject.messages[latest_message_number].ts,
-        responseObject.messages[latest_message_number].user, responseObject.messages[latest_message_number].text
+        responseObject.messages[latest_message_number].user, responseObject.messages[latest_message_number].text, channelInfo
         );
     }
 
@@ -296,11 +305,11 @@ namespace SlackBot
     /// Добавить эмодзи на открепляемое сообщение.
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени открепляемого сообщения.</param>
-    private static async void AddEmoji(string messageTimeStamp)
+    private static async void AddEmoji(string messageTimeStamp, SlackChannelInfo channelInfo)
     {
       var msg = new AddReactionMessage
       {
-        channel = channelID,
+        channel = channelInfo.ChannelID,
         timestamp = messageTimeStamp,
         name = emojiName
       };
@@ -321,18 +330,20 @@ namespace SlackBot
     /// </summary>
     /// <param name="messageTimeStamp">Отметка времени последнего сообщения из треда.</param>
     /// <param name="userID">ID автора последнего сообщения из треда. </param>
+    /// <param name="text">Текст сообщения, с которого начинаеся тред</param>
+    /// <param name="channelInfo">Информация о канале, в котором нахоидтся тред</param>
     /// <returns>Действие над закрепленным сообщением.</returns>
     private static MessageAction DefineActionByDateAndAuthorOfMessage(string messageTimeStamp, string userID,
-      string text)
+      string text, SlackChannelInfo channelInfo)
     {
       if (messageTimeStamp != null)      
       {
-        if ((userID != botID) & (IsOldPinedMessage(messageTimeStamp, daysBeforeWarning)))
+        if ((userID != botID) & (IsOldPinedMessage(messageTimeStamp, channelInfo.DaysBeforeWarning)))
         {
           return MessageAction.NeedWarning;
         }
-        else 
-        if ((userID == botID) & (IsOldPinedMessage(messageTimeStamp, daysBeforeUnpining)))
+        else
+        if ((userID == botID) & (IsOldPinedMessage(messageTimeStamp, channelInfo.DaysBeforeUnpining)))
         {
           return MessageAction.NeedUnpin;
         }
@@ -371,11 +382,11 @@ namespace SlackBot
     /// </summary>
     /// <param name="textMessage">Текст отправляемого сообщения.</param>
     /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
-    private static async void SendMessage(string textMessage, string messageTimeStamp)
+    private static async void SendMessage(string textMessage, string messageTimeStamp, SlackChannelInfo channelInfo)
     {
       var msg = new SlackMessage
       {
-        channel = channelID,
+        channel = channelInfo.ChannelID,
         text = textMessage,
         thread_ts = messageTimeStamp
       };
