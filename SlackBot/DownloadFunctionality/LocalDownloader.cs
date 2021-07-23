@@ -120,7 +120,7 @@ namespace SlackBot.DownloadFunctionality
         if (int.TryParse(fileName[^1].ToString(), out int i))
           fileName = fileName.Remove(fileName.Length - 1, 1) + $"({i + 1})";
         else
-          fileName += "1";
+          fileName += "(1)";
       }
       return $"{fileName}.{fileExtension.ToLower()}";
     }
