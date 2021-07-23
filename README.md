@@ -1,35 +1,43 @@
 # SlackBot
+## Описание
 
-Бот для слака, который умеет отпинивать закреплненные сообщения спустя заданный промежуток дней, скачивать треды по нажатию на кнопку, доступную в раскрывающемся меню сообщения
+Бот для Slack, который умеет отпинивать неактивные закрепленные сообщения спустя заданный промежуток дней, а также скачивать треды с вложениями.
 
-## Конфигурация бота
+## Настройка Workspace
 
-На сайте конфигурации бота перейти на вкладку Socket Mode и активировать одноименный мод. Создать App-level Token на вкладке Basic Information с разрешением connections:write.  
-На вкладке Interactivity & Shortcuts создать свой Shortcut для сообщений и придумать ему Callback Id.
-Выдать боту следующие необходимые для работы разрешения на вкладке OAuth & Permissions:  
-pins:read, pins:write, channels:history, groups:history, im:history, mpim:history, reactions:write, chat:write, users:read;
+На сайте конфигурации бота (https://api.slack.com/apps/...):
+- создать новое приложение по инструкции [здесь будет ссылка];
 
-## Конфигурация приложения
+- перейти на вкладку Socket Mode и включить переключатель "Enable Socket Mode".
 
-В файле appsettings.json есть следующие настройки, которые нужно заполнить:
+- создать App-level Token на вкладке Basic Information с разрешением connections:write.  
 
-BotToken: токен бота, который можно получить на вкладке OAuth & Permissions  
+- на вкладке Interactivity & Shortcuts создать свой Shortcut для сообщений и придумать ему Callback Id.
 
-BotLevelToken: еще один токен бота, который необходим для работы Socket mod`a. Найти/создать можно на вкладке Basic  Information в категории App-Level Tokens  
+- на вкладке OAuth & Permissions выдать боту следующие разрешения:
+pins:read, pins:write, channels:history, groups:history, im:history, mpim:history, reactions:write, chat:write, users:read.
 
-BotId: id бота, можно найти в slack`e  
+## Настройка приложения
 
-ShortcutCallbackID: Callback Id, который был создан в конфигурации бота выше  
+В файле appsettings.json заполнить следующие настройки:
 
-PathToDownloadDirectory: Путь по которому бот будет скачивать треды  
+- BotToken: токен бота, который можно получить на вкладке OAuth & Permissions;
 
-Channels: массив каналов, в которых бот будет отпинивать устаревшие сообщения:
-- ChannelID: Id канала за которым следит бот  
+- BotLevelToken: еще один токен бота, который необходим для работы Socket mod'a. Найти/создать можно на вкладке Basic Information в категории App-Level Tokens;
 
-- DaysBeforeWarning: количество дней через которое бот отправит оповещение о устаревшем треде  
+- BotId: id бота, можно найти в slack'e;
 
-- DaysBeforeUnpining: количество дней через которое бот открепит закрепленный тред(открепление происходит только после истечения DaysBeforeWarning)
+- ShortcutCallbackID: Callback Id, который был создан при настройке Workspace ранее;
 
-## Example
+- PathToDownloadDirectory: Имя сетевой папки, в которую бот будет скачивать треды;
+
+- Channels: список каналов, в которых бот будет отпинивать неактивные сообщения:
+  - ChannelID: Id канала, за сообщениями которого следит бот (можно найти в свойствах канала в Slack); ![image](https://user-images.githubusercontent.com/2363923/126785486-06eef727-65b7-4b21-997c-ad5b4ef3c154.png)
+
+  - DaysBeforeWarning: количество дней после последнего сообщения, через которое бот отправит предупреждение об неактивном треде;
+
+  - DaysBeforeUnpining: количество дней после предупреждения, через которое бот открепит неактивный тред.
+
+## Пример
 
 ![image](https://user-images.githubusercontent.com/55059498/126780340-452a4b0a-2d10-4069-8569-81c8c6a12fce.png)
