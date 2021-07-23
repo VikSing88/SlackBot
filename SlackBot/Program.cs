@@ -4,9 +4,14 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
+using SlackBot.DownloadFunctionality;
+using SlackBot.DTOs;
+using SlackNet;
+using SlackNet.WebApi;
 
 namespace SlackBot
 {
@@ -70,6 +75,31 @@ namespace SlackBot
     /// Токен бота.
     /// </summary>
     private static string botToken;
+
+    /// <summary>
+    /// Токен бота для подключения через Socket Mode.
+    /// </summary>
+    private static string botLevelToken;
+
+    /// <summary>
+    /// Сервис для регистрации ивентов и подключения к слаку.
+    /// </summary>
+    private static SlackServiceBuilder slackService;
+
+    /// <summary>
+    /// Клиент для работы со слаком.
+    /// </summary>
+    private static SlackApiClient slackApi;
+
+    /// <summary>
+    /// Callback id shortcut команды.
+    /// </summary>
+    private static string shortcutCallbackID;
+
+    /// <summary>
+    /// Путь куда будет скачиваться тред.
+    /// </summary>
+    private static string pathToDownloadDirectory;
 
     /// <summary>
     /// Информация о всех каналах.
@@ -148,8 +178,11 @@ namespace SlackBot
           SlackChannelsInfo.Add(new SlackChannelInfo(channelID, daysBeforeWarning, daysBeforeUnpining));
           i++;
         }
+        shortcutCallbackID = config["ShortcutCallbackID"];
         botToken = config["BotToken"];
+        pathToDownloadDirectory = config["PathToDownloadDirectory"];
         botID = config["BotID"];
+        botLevelToken = config["BotLevelToken"];
       }
       catch (Exception ex)
       {
@@ -161,6 +194,7 @@ namespace SlackBot
     private static void ConnectToSlack()
     {
       var webProxy = new WebProxy();
+      slackApi = (SlackApiClient)slackService.GetApiClient();
       webProxy.UseDefaultCredentials = true;
       try
       {
@@ -174,6 +208,15 @@ namespace SlackBot
       }
     }
 
+    private static async void ConfigureSlackService()
+    {
+      slackService = new SlackServiceBuilder()
+        .UseApiToken(botToken)
+        .UseAppLevelToken(botLevelToken)
+        .RegisterMessageShortcutHandler(shortcutCallbackID, new DownloadHandler(botToken, new LocalDownloader(pathToDownloadDirectory)));
+      await slackService.GetSocketModeClient().Connect();
+    }
+
     public static void Main()
     {
       try
@@ -181,12 +224,17 @@ namespace SlackBot
         Console.WriteLine("Работа бота начата.");
 
         ReadConfig();
+        ConfigureSlackService();
         ConnectToSlack();
-        foreach(var channelInfo in SlackChannelsInfo)
+        while(true)
         {
-          tasks.Add(Task.Run(() => ProcessPinsList(channelInfo)));
+          foreach(var channelInfo in SlackChannelsInfo)
+          {
+            tasks.Add(Task.Run(() => ProcessPinsList(channelInfo)));
+          }
+          Task.WaitAll(tasks.ToArray());
+          Thread.Sleep(3600000);
         }
-        Task.WaitAll(tasks.ToArray());
       }
       catch
       {
@@ -375,6 +423,50 @@ namespace SlackBot
       var dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc);
       dateTime = dateTime.AddSeconds(unixTimeStamp).ToLocalTime();
       return dateTime;
+    }
+
+    /// <summary>
+    /// Получить весь тред.
+    /// </summary>
+    /// <param name="messageTimestamp">Время первого сообщения треда.</param>
+    /// <param name="channel">Канал треда.</param>
+    /// <returns>Все сообщения треда.</returns>
+    public static ThreadDTO GetThread(string messageTimestamp, string channel)
+    {
+      return slackApi.Get<ThreadDTO>("conversations.replies", new Dictionary<string, object>
+      {
+        {"channel", channel },
+        {"ts", messageTimestamp },
+        {"limit", "50" }
+      }, null).Result;
+    }
+
+    /// <summary>
+    /// Отправляет пользователю сообщение типа Only visible to you.
+    /// </summary>
+    /// <param name="message">Сообщение для отправки.</param>
+    /// <param name="userId">Id пользователя, которому нужно отправить сообщение.</param>
+    /// <param name="channelId">Id чата для отправки сообщения.</param>
+    public static void PostEphemeralMessageToUser(string message, string userId, string channelId)
+    {
+      slackApi.Chat.PostEphemeral(userId, new Message()
+      {
+        Text = message,
+        Channel = channelId
+      });
+    }
+
+    /// <summary>
+    /// Получить ник пользователя по его id.
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <returns>Ник пользователя.</returns>
+    public static UserDTO GetUserNameById(string userId)
+    {
+      return slackApi.Get<UserDTO>("users.info", new Dictionary<string, object>
+      {
+        {"user", userId },
+      }, null).Result;
     }
 
     /// <summary>

@@ -1,0 +1,12 @@
+﻿namespace SlackBot.DTOs
+{
+  class UserDTO
+  {
+    public bool Ok { get; set; }
+    public User User { get; set; }
+  }
+  class User
+  {
+    public string Name { get; set; }
+  }
+}
