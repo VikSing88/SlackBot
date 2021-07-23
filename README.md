@@ -6,7 +6,7 @@
 ## Настройка Workspace
 
 На сайте конфигурации бота (https://api.slack.com/apps/...):
-- создать новое приложение по инструкции [здесь будет ссылка];
+- создать новое приложение по инструкции https://api.slack.com/authentication/basics;
 
 - перейти на вкладку Socket Mode и включить переключатель "Enable Socket Mode".
 
