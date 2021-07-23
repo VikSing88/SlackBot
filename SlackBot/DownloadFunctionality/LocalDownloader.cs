@@ -117,8 +117,8 @@ namespace SlackBot.DownloadFunctionality
       var fileExtension = defaultFileName.Split('.')[1];
       while (File.Exists($@"{pathToThreadFolder}\files\{fileName}.{fileExtension}"))
       {
-        if (int.TryParse(fileName[^1].ToString(), out int i))
-          fileName = fileName.Remove(fileName.Length - 1, 1) + $"({i + 1})";
+        if (int.TryParse(fileName[^2].ToString(), out int i))
+          fileName = fileName.Remove(fileName.Length - 2, 2) + $"{i + 1})";
         else
           fileName += "(1)";
       }
