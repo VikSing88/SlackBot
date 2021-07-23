@@ -245,13 +245,14 @@ namespace SlackBot
     /// <summary>
     /// Обработать список запиненных сообщений.
     /// </summary>
-    private static async Task ProcessPinsList(SlackChannelInfo channelInfo)
+    private static void ProcessPinsList(SlackChannelInfo channelInfo)
     {
       try
       {
-        var response = await client.GetAsync($"{slackApiLink}pins.list?channel={channelInfo.ChannelID}");
-        var responseJson = await response.Content.ReadAsStringAsync();
-        var list = JsonConvert.DeserializeObject<PinsResponse>(responseJson);
+        var list = slackApi.Get<PinsResponse>("pins.list", new Dictionary<string, object>()
+        {
+          {"channel", channelInfo.ChannelID }
+        }, null).Result;
         var oldMessageTSList = GetOldMessageList(list.items, channelInfo);
         ReplyMessageInOldThreads(oldMessageTSList, channelInfo);
       }
@@ -286,24 +287,14 @@ namespace SlackBot
     /// <summary>
     /// Открепить сообщение.
     /// </summary>
-    /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
-    private static async void UnpinMessage(string messageTimeStamp, SlackChannelInfo channelInfo)
+    /// <param name="messageTimestamp">Отметка времени закрепленного сообщения.</param>
+    private static async void UnpinMessage(string messageTimestamp, SlackChannelInfo channelInfo)
     {
-      var msg = new RemovePinMessage
+      await slackApi.Post<RemovePinMessage>("pins.remove", new Dictionary<string, object>()
       {
-        channel = channelInfo.ChannelID,
-        timestamp = messageTimeStamp
-      };
-
-      var content = JsonConvert.SerializeObject(msg);
-      var httpContent = new StringContent(
-          content,
-          Encoding.UTF8,
-          "application/json"
-      );
-
-      var response = await client.PostAsync(slackApiLink + "pins.remove", httpContent);
-      var responseJson = await response.Content.ReadAsStringAsync();
+        {"channel", channelInfo.ChannelID },
+        {"timestamp", messageTimestamp }
+      }, null);
     }
 
     /// <summary>
@@ -335,13 +326,15 @@ namespace SlackBot
     /// <summary>
     /// Определить действие, которое необходимо с закрепленным сообщением.
     /// </summary>
-    /// <param name="messageTimeStamp">Отметка времени запиненного сообщения.</param>
+    /// <param name="messageTimestamp">Отметка времени запиненного сообщения.</param>
     /// <returns>Действие, которое необходимо с закрепленным сообщением.</returns>
-    private static async Task<MessageAction> GetPinedMessageAction(string messageTimeStamp, SlackChannelInfo channelInfo)
+    private static MessageAction GetPinedMessageAction(string messageTimestamp, SlackChannelInfo channelInfo)
     {
-      var response = await client.GetAsync(slackApiLink + "conversations.replies?channel=" + channelInfo.ChannelID + "& ts=" + messageTimeStamp);
-      var responseJson = await response.Content.ReadAsStringAsync();
-      var responseObject = JsonConvert.DeserializeObject<RepliesResponse>(responseJson);
+      var responseObject = slackApi.Get<RepliesResponse>("conversations.replies", new Dictionary<string, object>()
+      {
+        {"channel", channelInfo.ChannelID },
+        {"ts", messageTimestamp }
+      }, null).Result;
 
       var latest_message_number = responseObject.messages.Count - 1;
       return DefineActionByDateAndAuthorOfMessage(responseObject.messages[latest_message_number].ts,
@@ -352,25 +345,15 @@ namespace SlackBot
     /// <summary>
     /// Добавить эмодзи на открепляемое сообщение.
     /// </summary>
-    /// <param name="messageTimeStamp">Отметка времени открепляемого сообщения.</param>
-    private static async void AddEmoji(string messageTimeStamp, SlackChannelInfo channelInfo)
+    /// <param name="messageTimestamp">Отметка времени открепляемого сообщения.</param>
+    private static void AddEmoji(string messageTimestamp, SlackChannelInfo channelInfo)
     {
-      var msg = new AddReactionMessage
+      slackApi.Post<AddReactionMessage>("reactions.add", new Dictionary<string, object>()
       {
-        channel = channelInfo.ChannelID,
-        timestamp = messageTimeStamp,
-        name = emojiName
-      };
-
-      var content = JsonConvert.SerializeObject(msg);
-      var httpContent = new StringContent(
-          content,
-          Encoding.UTF8,
-          "application/json"
-      );
-
-      var response = await client.PostAsync(slackApiLink + "reactions.add", httpContent);
-      var responseJson = await response.Content.ReadAsStringAsync();
+        {"channel", channelInfo.ChannelID },
+        {"timestamp", messageTimestamp },
+        {"name", emojiName }
+      }, null);
     }
 
     /// <summary>
@@ -474,24 +457,14 @@ namespace SlackBot
     /// </summary>
     /// <param name="textMessage">Текст отправляемого сообщения.</param>
     /// <param name="messageTimeStamp">Отметка времени закрепленного сообщения.</param>
-    private static async void SendMessage(string textMessage, string messageTimeStamp, SlackChannelInfo channelInfo)
+    private static void SendMessage(string textMessage, string messageTimeStamp, SlackChannelInfo channelInfo)
     {
-      var msg = new SlackMessage
+      slackApi.Chat.PostMessage(new Message()
       {
-        channel = channelInfo.ChannelID,
-        text = textMessage,
-        thread_ts = messageTimeStamp
-      };
-
-      var content = JsonConvert.SerializeObject(msg);
-      var httpContent = new StringContent(
-          content,
-          Encoding.UTF8,
-          "application/json"
-      );
-
-      var response = await client.PostAsync(slackApiLink + "chat.postMessage", httpContent);
-      var responseJson = await response.Content.ReadAsStringAsync();
+        Channel = channelInfo.ChannelID,
+        Text = textMessage,
+        ThreadTs = messageTimeStamp
+      });
     }
     #endregion
   }
