@@ -210,10 +210,22 @@ namespace SlackBot
 
     private static async void ConfigureSlackService()
     {
+      var httpClient = new HttpClient(new HttpClientHandler
+      {
+        Proxy = new WebProxy { UseDefaultCredentials = true, },
+      });
+      var jsonSettings = Default.JsonSettings(Default.SlackTypeResolver(Default.AssembliesContainingSlackTypes));
+
       slackService = new SlackServiceBuilder()
+        .UseHttp(p => Default.Http(jsonSettings, () => httpClient))
+        .UseJsonSettings(p => jsonSettings)
         .UseApiToken(botToken)
         .UseAppLevelToken(botLevelToken)
-        .RegisterMessageShortcutHandler(shortcutCallbackID, new DownloadHandler(botToken, new LocalDownloader(pathToDownloadDirectory)));
+        .RegisterMessageShortcutHandler(shortcutCallbackID, ctx =>
+        {
+          var slackApi = ctx.ServiceProvider.GetApiClient();
+          return new DownloadHandler(slackApi, new LocalDownloader(botToken, slackApi, pathToDownloadDirectory));
+        });
       await slackService.GetSocketModeClient().Connect();
     }
 
@@ -426,50 +438,6 @@ namespace SlackBot
     }
 
     /// <summary>
-    /// Получить весь тред.
-    /// </summary>
-    /// <param name="messageTimestamp">Время первого сообщения треда.</param>
-    /// <param name="channel">Канал треда.</param>
-    /// <returns>Все сообщения треда.</returns>
-    public static ThreadDTO GetThread(string messageTimestamp, string channel)
-    {
-      return slackApi.Get<ThreadDTO>("conversations.replies", new Dictionary<string, object>
-      {
-        {"channel", channel },
-        {"ts", messageTimestamp },
-        {"limit", "50" }
-      }, null).Result;
-    }
-
-    /// <summary>
-    /// Отправляет пользователю сообщение типа Only visible to you.
-    /// </summary>
-    /// <param name="message">Сообщение для отправки.</param>
-    /// <param name="userId">Id пользователя, которому нужно отправить сообщение.</param>
-    /// <param name="channelId">Id чата для отправки сообщения.</param>
-    public static void PostEphemeralMessageToUser(string message, string userId, string channelId)
-    {
-      slackApi.Chat.PostEphemeral(userId, new Message()
-      {
-        Text = message,
-        Channel = channelId
-      });
-    }
-
-    /// <summary>
-    /// Получить ник пользователя по его id.
-    /// </summary>
-    /// <param name="userId"></param>
-    /// <returns>Ник пользователя.</returns>
-    public static UserDTO GetUserNameById(string userId)
-    {
-      return slackApi.Get<UserDTO>("users.info", new Dictionary<string, object>
-      {
-        {"user", userId },
-      }, null).Result;
-    }
-
-    /// <summary>
     /// Отправить сообщение в тред закрепленного сообщения.
     /// </summary>
     /// <param name="textMessage">Текст отправляемого сообщения.</param>
@@ -494,5 +462,91 @@ namespace SlackBot
       var responseJson = await response.Content.ReadAsStringAsync();
     }
     #endregion
+  }
+  static class GetThreadExtension
+  {
+    /// <summary>
+    /// Получить весь тред.
+    /// </summary>
+    /// <param name="messageTimestamp">Время первого сообщения треда.</param>
+    /// <param name="channel">Канал треда.</param>
+    /// <returns>Все сообщения треда.</returns>
+    public static ThreadDTO GetThread(this IConversationsApi conversations, string messageTimestamp, string channel)
+    {
+      var messages = conversations.Replies(channel, messageTimestamp, limit: 50).Result.Messages;
+      List<MessageDTO> messageDTO = new List<MessageDTO>(messages.Count);
+      ThreadDTO thread = new ThreadDTO();
+      foreach (var message in messages)
+      {
+        messageDTO.Add(new MessageDTO
+        {
+          Text = message.Text,
+          Ts = message.Ts,
+          User = message.User,
+          Files = GetFiles(new List<FileDTO>())
+        });
+
+        List<FileDTO> GetFiles(List<FileDTO> list)
+        {
+          if (message.Files.Count == 0) return null;
+          foreach (var file in message.Files)
+          {
+            list.Add(new FileDTO
+            {
+              Name = file.Name,
+              UrlPrivateDownload = file.UrlPrivateDownload
+            });
+          }
+          return list;
+        }
+      }
+      thread.Messages = messageDTO;
+      return thread;
+    }
+
+
+  }
+
+  public static class PostEphemeralMessageToUserExtension
+  {
+    /// <summary>
+    /// Отправляет пользователю сообщение типа Only visible to you.
+    /// </summary>
+    /// <param name="message">Сообщение для отправки.</param>
+    /// <param name="userId">Id пользователя, которому нужно отправить сообщение.</param>
+    /// <param name="channelId">Id чата для отправки сообщения.</param>
+    public static void PostEphemeralMessageToUser(this IChatApi chat, string text, string userId, string channelId)
+    {
+      Message message = new Message
+      {
+        Text = text,
+        Channel = channelId
+      };
+      chat.PostEphemeral(userId, message);
+    }
+  }
+
+  static class GetUserNameByIdExtension
+  {
+    /// <summary>
+    /// Получить ник пользователя по его id.
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <returns>Ник пользователя.</returns>
+    public static UserDTO GetUserNameById(this IUsersApi user, string userId)
+    {
+      var name = user.Info(userId).Result.Name;
+      var realName = user.Info(userId).Result.RealName;
+      DTOs.User DTOsUser = new DTOs.User
+      {
+        Name = name,
+        RealName = realName
+      };
+      UserDTO userDTO = new UserDTO
+      {
+        User = DTOsUser
+      };
+      return userDTO;
+    }
   }
 }
