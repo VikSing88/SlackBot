@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using SlackNet;
 
 namespace SlackBot.DownloadFunctionality
 {
@@ -11,10 +12,14 @@ namespace SlackBot.DownloadFunctionality
     /// </summary>
     string msg;
     readonly string pathToDownloadDirectory;
+    private string botToken;
+    private ISlackApiClient slackApi;
 
-    public LocalDownloader(string pathToDownloadDirectory)
+    public LocalDownloader(string botToken, ISlackApiClient slackApi, string pathToDownloadDirectory)
     {
       this.pathToDownloadDirectory = pathToDownloadDirectory;
+      this.botToken = botToken;
+      this.slackApi = slackApi;
     }
 
     /// <summary>
@@ -24,20 +29,20 @@ namespace SlackBot.DownloadFunctionality
     /// <param name="channelName">Название канала, в котором расположен тред.</param>
     /// <param name="botToken">Токен бота.</param>
     /// <returns>Полный путь до папки с тредом.</returns>
-    public string DownloadThread(ThreadDTO thread, string channelName, string botToken)
+    public string DownloadThread(ThreadDTO thread, string channelName)
     {
       var pathToThreadFolder = CreateThreadFolder(thread.Messages[0], channelName);
       using StreamWriter sw = new StreamWriter(@$"{pathToThreadFolder}\thread.txt");
       foreach (var message in thread.Messages)
       {
         var messageTimestamp = SlackBot.ConvertUnixTimeStampToDateTime(Convert.ToDouble(message.Ts.Substring(0, message.Ts.IndexOf('.'))));
-        var userName = SlackBot.GetUserNameById(message.User).User.Name;
+        var userName = slackApi.Users.GetUserNameById(message.User).User.Name;
 
         msg = $"{messageTimestamp}\r\n" +
           $"{userName}: {message.Text}\r\n";
         if (message.Files != null)
         {
-          DownloadFiles(message, botToken, pathToThreadFolder);
+          DownloadFiles(message, pathToThreadFolder);
         }
         sw.WriteLine(msg);
       }
@@ -55,7 +60,7 @@ namespace SlackBot.DownloadFunctionality
       var threadTS = SlackBot.ConvertUnixTimeStampToDateTime
         (Convert.ToDouble(firstMessageInThread.Ts.Substring(0, firstMessageInThread.Ts.IndexOf('.'))))
         .ToString("yyyy/MM/dd HH-mm");
-      var userName = SlackBot.GetUserNameById(firstMessageInThread.User).User.Name;
+      var userName = slackApi.Users.GetUserNameById(firstMessageInThread.User).User.Name;
       var pathToThreadFolder = @$"{pathToDownloadDirectory}{channelName}\{threadTS} {userName}";
       if (Directory.Exists(@$"{pathToThreadFolder}\files"))
       {
@@ -89,7 +94,7 @@ namespace SlackBot.DownloadFunctionality
     /// <param name="message">Сообщение, к которму прикреплены файлы.</param>
     /// <param name="botToken">Токен бота.</param>
     /// <param name="pathToThreadFolder"></param>
-    private void DownloadFiles(MessageDTO message, string botToken, string pathToThreadFolder)
+    private void DownloadFiles(MessageDTO message, string pathToThreadFolder)
     {
       msg += "Вложенные файлы: ";
       using (WebClient client = new WebClient())
@@ -115,10 +120,11 @@ namespace SlackBot.DownloadFunctionality
     {
       var fileName = defaultFileName.Split('.')[0];
       var fileExtension = defaultFileName.Split('.')[1];
-      while (File.Exists($@"{pathToThreadFolder}\files\{fileName}.{fileExtension}"))
+      var path = $@"{pathToThreadFolder}\files\{fileName}.{fileExtension}";
+      while (System.IO.File.Exists(path))
       {
-        if (int.TryParse(fileName[^1].ToString(), out int i))
-          fileName = fileName.Remove(fileName.Length - 1, 1) + $"({i + 1})";
+        if (int.TryParse(fileName[^2].ToString(), out int i))
+          fileName = fileName.Remove(fileName.Length - 2, 2) + $"{i + 1})";
         else
           fileName += "(1)";
       }
