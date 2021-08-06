@@ -533,14 +533,13 @@ namespace SlackBot
     /// </summary>
     /// <param name="userId"></param>
     /// <returns>Ник пользователя.</returns>
-    public static UserDTO GetUserNameById(this IUsersApi user, string userId)
+    public static UserDTO GetUserNameById(this IUsersApi users, string userId)
     {
-      var name = user.Info(userId).Result.Name;
-      var realName = user.Info(userId).Result.RealName;
+      var user = users.Info(userId).Result;
       DTOs.User DTOsUser = new DTOs.User
       {
-        Name = name,
-        RealName = realName
+        Name = user.Name,
+        RealName = user.RealName
       };
       UserDTO userDTO = new UserDTO
       {
