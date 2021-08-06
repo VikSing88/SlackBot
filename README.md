@@ -15,7 +15,7 @@
 - на вкладке Interactivity & Shortcuts создать свой Shortcut для сообщений и придумать ему Callback Id.
 
 - на вкладке OAuth & Permissions выдать боту следующие разрешения:
-pins:read, pins:write, channels:history, groups:history, im:history, mpim:history, reactions:write, chat:write, users:read.
+pins:read, pins:write, channels:history, groups:history, im:history, mpim:history, reactions:write, chat:write, users:read, files:read.
 
 ## Настройка приложения
 
