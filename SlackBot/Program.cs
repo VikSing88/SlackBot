@@ -302,11 +302,7 @@ namespace SlackBot
     /// <param name="messageTimestamp">Отметка времени закрепленного сообщения.</param>
     private static async void UnpinMessage(string messageTimestamp, SlackChannelInfo channelInfo)
     {
-      await slackApi.Post<RemovePinMessage>("pins.remove", new Dictionary<string, object>()
-      {
-        {"channel", channelInfo.ChannelID },
-        {"timestamp", messageTimestamp }
-      }, null);
+      await slackApi.Pins.RemoveMessage(channelInfo.ChannelID, messageTimestamp);
     }
 
     /// <summary>
@@ -342,15 +338,10 @@ namespace SlackBot
     /// <returns>Действие, которое необходимо с закрепленным сообщением.</returns>
     private static MessageAction GetPinedMessageAction(string messageTimestamp, SlackChannelInfo channelInfo)
     {
-      var responseObject = slackApi.Get<RepliesResponse>("conversations.replies", new Dictionary<string, object>()
-      {
-        {"channel", channelInfo.ChannelID },
-        {"ts", messageTimestamp }
-      }, null).Result;
-
-      var latest_message_number = responseObject.messages.Count - 1;
-      return DefineActionByDateAndAuthorOfMessage(responseObject.messages[latest_message_number].ts,
-        responseObject.messages[latest_message_number].user, responseObject.messages[latest_message_number].text, channelInfo
+      var responseObject = slackApi.Conversations.Replies(channelInfo.ChannelID, messageTimestamp).Result;
+      var latest_message_number = responseObject.Messages.Count - 1;
+      return DefineActionByDateAndAuthorOfMessage(responseObject.Messages[latest_message_number].Ts,
+        responseObject.Messages[latest_message_number].User, responseObject.Messages[latest_message_number].Text, channelInfo
         );
     }
 
@@ -360,12 +351,7 @@ namespace SlackBot
     /// <param name="messageTimestamp">Отметка времени открепляемого сообщения.</param>
     private static void AddEmoji(string messageTimestamp, SlackChannelInfo channelInfo)
     {
-      slackApi.Post<AddReactionMessage>("reactions.add", new Dictionary<string, object>()
-      {
-        {"channel", channelInfo.ChannelID },
-        {"timestamp", messageTimestamp },
-        {"name", emojiName }
-      }, null);
+      slackApi.Reactions.AddToMessage(emojiName, channelInfo.ChannelID, messageTimestamp);
     }
 
     /// <summary>
