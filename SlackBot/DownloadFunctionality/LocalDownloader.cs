@@ -36,7 +36,7 @@ namespace SlackBot.DownloadFunctionality
       foreach (var message in thread.Messages)
       {
         var messageTimestamp = SlackBot.ConvertUnixTimeStampToDateTime(Convert.ToDouble(message.Ts.Substring(0, message.Ts.IndexOf('.'))));
-        var userName = slackApi.Users.GetUserNameById(message.User).User.Name;
+        var userName = slackApi.Users.GetUserNameById(message.User).User.RealName;
 
         msg = $"{messageTimestamp}\r\n" +
           $"{userName}: {message.Text}\r\n";
@@ -120,8 +120,7 @@ namespace SlackBot.DownloadFunctionality
     {
       var fileName = defaultFileName.Split('.')[0];
       var fileExtension = defaultFileName.Split('.')[1];
-      var path = $@"{pathToThreadFolder}\files\{fileName}.{fileExtension}";
-      while (System.IO.File.Exists(path))
+      while (System.IO.File.Exists($@"{pathToThreadFolder}\files\{fileName}.{fileExtension}"))
       {
         if (int.TryParse(fileName[^2].ToString(), out int i))
           fileName = fileName.Remove(fileName.Length - 2, 2) + $"{i + 1})";
