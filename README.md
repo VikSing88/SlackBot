@@ -17,6 +17,8 @@
 - на вкладке OAuth & Permissions выдать боту следующие разрешения:
 pins:read, pins:write, channels:history, groups:history, im:history, mpim:history, reactions:write, chat:write, users:read, files:read.
 
+- добавить бота в каналы, в которых он будет использоваться.
+
 ## Настройка приложения
 
 В файле appsettings.json заполнить следующие настройки:
