@@ -12,6 +12,7 @@ using SlackBot.DownloadFunctionality;
 using SlackBot.DTOs;
 using SlackNet;
 using SlackNet.WebApi;
+using System.Linq;
 
 namespace SlackBot
 {
@@ -261,11 +262,12 @@ namespace SlackBot
     {
       try
       {
-        var list = slackApi.Get<PinsResponse>("pins.list", new Dictionary<string, object>()
-        {
-          {"channel", channelInfo.ChannelID }
-        }, null).Result;
-        var oldMessageTSList = GetOldMessageList(list.items, channelInfo);
+        //var list = slackApi.Get<PinsResponse>("pins.list", new Dictionary<string, object>()
+        //{
+        //  {"channel", channelInfo.ChannelID }
+        //}, null).Result;
+        var list = slackApi.Pins.List(channelInfo.ChannelID).Result.OfType<PinnedMessage>();
+        var oldMessageTSList = GetOldMessageList(list, channelInfo);
         ReplyMessageInOldThreads(oldMessageTSList, channelInfo);
       }
       catch(Exception ex)
@@ -310,19 +312,19 @@ namespace SlackBot
     /// </summary>
     /// <param name="pinedMessages">Полный список закрепленных сообщений.</param>
     /// <returns>Список закрепленных сообщений, с момента создания которых прошло больше DaysCountBeforeWarning дней.</returns>
-    private static List<MessageInfo> GetOldMessageList(List<PinItem> pinedMessages, SlackChannelInfo channelInfo)
+    private static List<MessageInfo> GetOldMessageList(IEnumerable<PinnedMessage> pinedMessages, SlackChannelInfo channelInfo)
     {
       var oldPinedMessageList = new List<MessageInfo>();
       if (pinedMessages != null)
       {
-        foreach (PinItem pinedMessage in pinedMessages)
+        foreach (var pinedMessage in pinedMessages)
         {
-          if (IsOldPinedMessage(pinedMessage.message.ts, Math.Min(channelInfo.DaysBeforeWarning, channelInfo.DaysBeforeUnpining)))
+          if (IsOldPinedMessage(pinedMessage.Message.Ts, Math.Min(channelInfo.DaysBeforeWarning, channelInfo.DaysBeforeUnpining)))
           {
-            MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.message.ts, channelInfo)).Result;
+            MessageAction msgAction = Task.Run(() => GetPinedMessageAction(pinedMessage.Message.Ts, channelInfo)).Result;
             oldPinedMessageList.Add(new MessageInfo()
             {
-              timeStamp = pinedMessage.message.ts,
+              timeStamp = pinedMessage.Message.Ts,
               action = msgAction
             });
           }
