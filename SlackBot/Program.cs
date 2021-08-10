@@ -85,12 +85,12 @@ namespace SlackBot
     /// <summary>
     /// Сервис для регистрации ивентов и подключения к слаку.
     /// </summary>
-    private static SlackServiceBuilder slackService;
+    private static ISlackServiceProvider slackService;
 
     /// <summary>
     /// Клиент для работы со слаком.
     /// </summary>
-    private static SlackApiClient slackApi;
+    private static ISlackApiClient slackApi;
 
     /// <summary>
     /// Callback id shortcut команды.

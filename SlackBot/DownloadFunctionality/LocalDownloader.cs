@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Text;
 using SlackNet;
 
 namespace SlackBot.DownloadFunctionality
@@ -10,7 +11,7 @@ namespace SlackBot.DownloadFunctionality
     /// <summary>
     /// Полное сообщение из треда.
     /// </summary>
-    string msg;
+    readonly StringBuilder msg = new StringBuilder();
     readonly string pathToDownloadDirectory;
     private string botToken;
     private ISlackApiClient slackApi;
@@ -37,9 +38,10 @@ namespace SlackBot.DownloadFunctionality
       {
         var messageTimestamp = SlackBot.ConvertUnixTimeStampToDateTime(Convert.ToDouble(message.Ts.Substring(0, message.Ts.IndexOf('.'))));
         var userName = slackApi.Users.GetUserNameById(message.User).User.RealName;
-
-        msg = $"{messageTimestamp}\r\n" +
-          $"{userName}: {message.Text}\r\n";
+        //string text = $"{messageTimestamp}\r\n" +
+        //  $"{userName}: {message.Text}\r\n";
+        msg.Clear();
+        msg.AppendFormat(messageTimestamp + "\r\n" + userName + ": "+ message.Text + "\r\n");
         if (message.Files != null)
         {
           DownloadFiles(message, pathToThreadFolder);
@@ -60,7 +62,7 @@ namespace SlackBot.DownloadFunctionality
       var threadTS = SlackBot.ConvertUnixTimeStampToDateTime
         (Convert.ToDouble(firstMessageInThread.Ts.Substring(0, firstMessageInThread.Ts.IndexOf('.'))))
         .ToString("yyyy/MM/dd HH-mm");
-      var userName = slackApi.Users.GetUserNameById(firstMessageInThread.User).User.Name;
+      var userName = slackApi.Users.GetUserNameById(firstMessageInThread.User).User.RealName;
       var pathToThreadFolder = @$"{pathToDownloadDirectory}{channelName}\{threadTS} {userName}";
       if (Directory.Exists(@$"{pathToThreadFolder}\files"))
       {
@@ -96,18 +98,19 @@ namespace SlackBot.DownloadFunctionality
     /// <param name="pathToThreadFolder"></param>
     private void DownloadFiles(MessageDTO message, string pathToThreadFolder)
     {
-      msg += "Вложенные файлы: ";
+      msg.Append("Вложенные файлы: ");
       using (WebClient client = new WebClient())
       {
+        client.Proxy = new WebProxy { UseDefaultCredentials = true, };
         client.Headers.Add($"Authorization: Bearer {botToken}");
         foreach (var file in message.Files)
         {
           var fileName = CreateUniqueFileName(pathToThreadFolder, file.Name);
-          msg += $"{fileName}; ";
+          msg.Append($"{fileName}; ");
           client.DownloadFile(new Uri(file.UrlPrivateDownload), $@"{pathToThreadFolder}\files\{fileName}");
         }
       }
-      msg += "\r\n";
+      msg.Append("\r\n");
     }
 
     /// <summary>
