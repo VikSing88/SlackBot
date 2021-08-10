@@ -4,9 +4,14 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
+using SlackBot.DownloadFunctionality;
+using SlackBot.DTOs;
+using SlackNet;
+using SlackNet.WebApi;
 
 namespace SlackBot
 {
@@ -70,6 +75,31 @@ namespace SlackBot
     /// Токен бота.
     /// </summary>
     private static string botToken;
+
+    /// <summary>
+    /// Токен бота для подключения через Socket Mode.
+    /// </summary>
+    private static string botLevelToken;
+
+    /// <summary>
+    /// Сервис для регистрации ивентов и подключения к слаку.
+    /// </summary>
+    private static ISlackServiceProvider slackService;
+
+    /// <summary>
+    /// Клиент для работы со слаком.
+    /// </summary>
+    private static ISlackApiClient slackApi;
+
+    /// <summary>
+    /// Callback id shortcut команды.
+    /// </summary>
+    private static string shortcutCallbackID;
+
+    /// <summary>
+    /// Путь куда будет скачиваться тред.
+    /// </summary>
+    private static string pathToDownloadDirectory;
 
     /// <summary>
     /// Информация о всех каналах.
@@ -148,8 +178,11 @@ namespace SlackBot
           SlackChannelsInfo.Add(new SlackChannelInfo(channelID, daysBeforeWarning, daysBeforeUnpining));
           i++;
         }
+        shortcutCallbackID = config["ShortcutCallbackID"];
         botToken = config["BotToken"];
+        pathToDownloadDirectory = config["PathToDownloadDirectory"];
         botID = config["BotID"];
+        botLevelToken = config["BotLevelToken"];
       }
       catch (Exception ex)
       {
@@ -161,6 +194,7 @@ namespace SlackBot
     private static void ConnectToSlack()
     {
       var webProxy = new WebProxy();
+      slackApi = (SlackApiClient)slackService.GetApiClient();
       webProxy.UseDefaultCredentials = true;
       try
       {
@@ -174,6 +208,27 @@ namespace SlackBot
       }
     }
 
+    private static async void ConfigureSlackService()
+    {
+      var httpClient = new HttpClient(new HttpClientHandler
+      {
+        Proxy = new WebProxy { UseDefaultCredentials = true, },
+      });
+      var jsonSettings = Default.JsonSettings(Default.SlackTypeResolver(Default.AssembliesContainingSlackTypes));
+
+      slackService = new SlackServiceBuilder()
+        .UseHttp(p => Default.Http(jsonSettings, () => httpClient))
+        .UseJsonSettings(p => jsonSettings)
+        .UseApiToken(botToken)
+        .UseAppLevelToken(botLevelToken)
+        .RegisterMessageShortcutHandler(shortcutCallbackID, ctx =>
+        {
+          var slackApi = ctx.ServiceProvider.GetApiClient();
+          return new DownloadHandler(slackApi, new LocalDownloader(botToken, slackApi, pathToDownloadDirectory));
+        });
+      await slackService.GetSocketModeClient().Connect();
+    }
+
     public static void Main()
     {
       try
@@ -181,12 +236,17 @@ namespace SlackBot
         Console.WriteLine("Работа бота начата.");
 
         ReadConfig();
+        ConfigureSlackService();
         ConnectToSlack();
-        foreach(var channelInfo in SlackChannelsInfo)
+        while(true)
         {
-          tasks.Add(Task.Run(() => ProcessPinsList(channelInfo)));
+          foreach(var channelInfo in SlackChannelsInfo)
+          {
+            tasks.Add(Task.Run(() => ProcessPinsList(channelInfo)));
+          }
+          Task.WaitAll(tasks.ToArray());
+          Thread.Sleep(3600000);
         }
-        Task.WaitAll(tasks.ToArray());
       }
       catch
       {
@@ -402,5 +462,90 @@ namespace SlackBot
       var responseJson = await response.Content.ReadAsStringAsync();
     }
     #endregion
+  }
+  static class GetThreadExtension
+  {
+    /// <summary>
+    /// Получить весь тред.
+    /// </summary>
+    /// <param name="messageTimestamp">Время первого сообщения треда.</param>
+    /// <param name="channel">Канал треда.</param>
+    /// <returns>Все сообщения треда.</returns>
+    public static ThreadDTO GetThread(this IConversationsApi conversations, string messageTimestamp, string channel)
+    {
+      var messages = conversations.Replies(channel, messageTimestamp, limit: 50).Result.Messages;
+      List<MessageDTO> messageDTO = new List<MessageDTO>(messages.Count);
+      ThreadDTO thread = new ThreadDTO();
+      foreach (var message in messages)
+      {
+        messageDTO.Add(new MessageDTO
+        {
+          Text = message.Text,
+          Ts = message.Ts,
+          User = message.User,
+          Files = GetFiles(new List<FileDTO>())
+        });
+
+        List<FileDTO> GetFiles(List<FileDTO> list)
+        {
+          if (message.Files.Count == 0) return null;
+          foreach (var file in message.Files)
+          {
+            list.Add(new FileDTO
+            {
+              Name = file.Name,
+              UrlPrivateDownload = file.UrlPrivateDownload
+            });
+          }
+          return list;
+        }
+      }
+      thread.Messages = messageDTO;
+      return thread;
+    }
+
+
+  }
+
+  public static class PostEphemeralMessageToUserExtension
+  {
+    /// <summary>
+    /// Отправляет пользователю сообщение типа Only visible to you.
+    /// </summary>
+    /// <param name="message">Сообщение для отправки.</param>
+    /// <param name="userId">Id пользователя, которому нужно отправить сообщение.</param>
+    /// <param name="channelId">Id чата для отправки сообщения.</param>
+    public static void PostEphemeralMessageToUser(this IChatApi chat, string text, string userId, string channelId)
+    {
+      Message message = new Message
+      {
+        Text = text,
+        Channel = channelId
+      };
+      chat.PostEphemeral(userId, message);
+    }
+  }
+
+  static class GetUserNameByIdExtension
+  {
+    /// <summary>
+    /// Получить ник пользователя по его id.
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <returns>Ник пользователя.</returns>
+    public static UserDTO GetUserNameById(this IUsersApi users, string userId)
+    {
+      var user = users.Info(userId).Result;
+      DTOs.User DTOsUser = new DTOs.User
+      {
+        Name = user.Name,
+        RealName = user.RealName
+      };
+      UserDTO userDTO = new UserDTO
+      {
+        User = DTOsUser
+      };
+      return userDTO;
+    }
   }
 }
