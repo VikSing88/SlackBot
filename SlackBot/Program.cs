@@ -226,6 +226,11 @@ namespace SlackBot
         {
           var slackApi = ctx.ServiceProvider.GetApiClient();
           return new DownloadHandler(slackApi, new LocalDownloader(botToken, slackApi, pathToDownloadDirectory));
+        })
+        .RegisterEventHandler(p =>
+        {
+          var slackApi = slackService.GetApiClient();
+          return new MessageHandler(slackApi);
         });
       await slackService.GetSocketModeClient().Connect();
     }
