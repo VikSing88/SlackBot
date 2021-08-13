@@ -175,7 +175,7 @@ namespace SlackBot
             daysBeforeWarningByDefault);
           var daysBeforeUnpining = TryConvertStringToInt("daysBeforeUnpining", config.GetSection($"Channels:{i}:DaysBeforeUnpining").Value,
             daysBeforeUnpiningByDefault);
-          var autoPinNewMessage = config.GetSection($"Channels:{i}:AutoPinNewMessage").Value;
+          var autoPinNewMessage = bool.Parse(config.GetSection($"Channels:{i}:AutoPinNewMessage").Value);
           var welcomeMessage = config.GetSection($"Channels:{i}:WelcomeMessage").Value;
 
           SlackChannelsInfo.Add(new SlackChannelInfo(channelID, daysBeforeWarning, daysBeforeUnpining, autoPinNewMessage, welcomeMessage));
@@ -269,8 +269,6 @@ namespace SlackBot
     {
       try
       {
-        var list2 = slackApi.Pins.List(channelInfo.ChannelID);
-        var list1 = slackApi.Pins.List(channelInfo.ChannelID).Result;
         var list = slackApi.Pins.List(channelInfo.ChannelID).Result.OfType<PinnedMessage>();
         var oldMessageTSList = GetOldMessageList(list, channelInfo);
         ReplyMessageInOldThreads(oldMessageTSList, channelInfo);

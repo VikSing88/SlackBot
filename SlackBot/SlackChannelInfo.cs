@@ -2,7 +2,7 @@
 {
   class SlackChannelInfo
   {
-    public SlackChannelInfo(string channelID, int daysBeforeWarning, int daysBeforeUnpining, string autoPinNewMessage, string welcomeMessage)
+    public SlackChannelInfo(string channelID, int daysBeforeWarning, int daysBeforeUnpining, bool autoPinNewMessage, string welcomeMessage)
     {
       ChannelID = channelID;
       DaysBeforeWarning = daysBeforeWarning;
@@ -26,7 +26,7 @@
     /// <summary>
     /// Разрешение или запрет на автопин
     /// </summary>
-    public string AutoPinNewMessage { get; set; }
+    public bool AutoPinNewMessage { get; set; }
     /// <summary>
     /// Приветственное сообщение
     /// </summary>

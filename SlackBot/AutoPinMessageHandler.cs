@@ -28,9 +28,9 @@ namespace SlackBot
         var ts = newMessageEvent.Ts;
         foreach (var chanelInfo in slackChannelsInfo)
         {
-          if ((chanel == chanelInfo.ChannelID) && (String.Compare(chanelInfo.AutoPinNewMessage, "true") == 0))
+          if ((chanel == chanelInfo.ChannelID) && chanelInfo.AutoPinNewMessage)
           {
-            if (String.Compare(chanelInfo.WelcomeMessage, "") != 0)
+            if (!string.IsNullOrEmpty(chanelInfo.WelcomeMessage))
             {
               slack.Chat.PostEphemeralMessageToUser(chanelInfo.WelcomeMessage, newMessageEvent.User, chanel);
             }
