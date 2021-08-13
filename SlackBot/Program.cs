@@ -175,8 +175,10 @@ namespace SlackBot
             daysBeforeWarningByDefault);
           var daysBeforeUnpining = TryConvertStringToInt("daysBeforeUnpining", config.GetSection($"Channels:{i}:DaysBeforeUnpining").Value,
             daysBeforeUnpiningByDefault);
+          var autoPinNewMessage = bool.Parse(config.GetSection($"Channels:{i}:AutoPinNewMessage").Value);
+          var welcomeMessage = config.GetSection($"Channels:{i}:WelcomeMessage").Value;
 
-          SlackChannelsInfo.Add(new SlackChannelInfo(channelID, daysBeforeWarning, daysBeforeUnpining));
+          SlackChannelsInfo.Add(new SlackChannelInfo(channelID, daysBeforeWarning, daysBeforeUnpining, autoPinNewMessage, welcomeMessage));
           i++;
         }
         shortcutCallbackID = config["ShortcutCallbackID"];
@@ -226,6 +228,11 @@ namespace SlackBot
         {
           var slackApi = ctx.ServiceProvider.GetApiClient();
           return new DownloadHandler(slackApi, new LocalDownloader(botToken, slackApi, pathToDownloadDirectory));
+        })
+        .RegisterEventHandler(p =>
+        {
+          var slackApi = p.ServiceProvider.GetApiClient();
+          return new AutoPinMessageHandler(slackApi, SlackChannelsInfo);
         });
       await slackService.GetSocketModeClient().Connect();
     }
@@ -262,10 +269,6 @@ namespace SlackBot
     {
       try
       {
-        //var list = slackApi.Get<PinsResponse>("pins.list", new Dictionary<string, object>()
-        //{
-        //  {"channel", channelInfo.ChannelID }
-        //}, null).Result;
         var list = slackApi.Pins.List(channelInfo.ChannelID).Result.OfType<PinnedMessage>();
         var oldMessageTSList = GetOldMessageList(list, channelInfo);
         ReplyMessageInOldThreads(oldMessageTSList, channelInfo);
