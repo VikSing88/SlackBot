@@ -1,11 +1,8 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
-using SlackNet.Events;
-using SlackNet.Blocks;
-using SlackNet.WebApi;
 using SlackNet;
-using System.Collections.Generic;
-using System;
+using SlackNet.Events;
+using System.Linq;
 
 namespace SlackBot
 {
@@ -22,24 +19,28 @@ namespace SlackBot
 
     public Task Handle(MessageEvent newMessageEvent)
     {
-      if (newMessageEvent.ThreadTs == null)
+      var result = Task.CompletedTask;
+      if (IsRootMessage(newMessageEvent) && IsSimpleMessage(newMessageEvent))
       {
-        var chanel = newMessageEvent.Channel;
-        var ts = newMessageEvent.Ts;
-        foreach (var chanelInfo in slackChannelsInfo)
+        foreach (var channelInfo in slackChannelsInfo.Where(info => info.ChannelID == newMessageEvent.Channel))
         {
-          if ((chanel == chanelInfo.ChannelID) && chanelInfo.AutoPinNewMessage)
-          {
-            if (!string.IsNullOrEmpty(chanelInfo.WelcomeMessage))
-            {
-              slack.Chat.PostEphemeralMessageToUser(chanelInfo.WelcomeMessage, newMessageEvent.User, chanel);
-            }
-            return slack.Pins.AddMessage(chanel, ts);
-          }
+          if (!string.IsNullOrEmpty(channelInfo.WelcomeMessage))
+            result = result.ContinueWith(
+              (t) => slack.Chat.PostEphemeralMessageToUser(channelInfo.WelcomeMessage, newMessageEvent.User, newMessageEvent.Channel));
+
+          if (channelInfo.AutoPinNewMessage)
+            result = result.ContinueWith(
+              (t) => slack.Pins.AddMessage(newMessageEvent.Channel, newMessageEvent.Ts));
+
+          break;
         }
       }
-      return Task.CompletedTask;
+      return result;
     }
+
+    private bool IsRootMessage(MessageEvent messageEvent) => messageEvent.ThreadTs == null;
+
+    private bool IsSimpleMessage(MessageEvent messageEvent) => messageEvent.GetType() == typeof(MessageEvent);
   }
 }
 

@@ -13,7 +13,7 @@
 На сайте конфигурации бота (https://api.slack.com/apps/...):
 - создать новое приложение по инструкции https://api.slack.com/authentication/basics;
 
-- перейти на вкладку Socket Mode и включить переключатель "Enable Socket Mode".
+- на вкладке Socket Mode включить переключатель "Enable Socket Mode".
 
 - создать App-level Token на вкладке Basic Information с разрешением connections:write.  
 
@@ -21,6 +21,8 @@
 
 - на вкладке OAuth & Permissions выдать боту следующие разрешения:
 pins:read, pins:write, channels:history, groups:history, im:history, mpim:history, reactions:write, chat:write, users:read, files:read.
+
+- на вкладке Event Subscriptions включить переключатель "Enable Events" и в группе Subscribe to bot events добавить события "message.channels" и "message.groups".
 
 - добавить бота в каналы, в которых он будет использоваться.
 
